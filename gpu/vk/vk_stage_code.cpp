@@ -10,6 +10,8 @@
 
 #include "vk_internal.h"
 #include "vk_shader.h"
+// (no vk_work.h: no recorded command uses a shader module, so destroying one is no recorder boundary and drains nothing;
+// tests/test_recorder_sync.py's BOUNDARY_OK)
 
 namespace mkwvk {
 
