@@ -52,8 +52,19 @@ StageModule::StageModule(const Stage& st) {
     } catch (const std::bad_alloc&) {
         return;
     }
+    // (a context a thread, as the pack side's: ZSTD_decompress makes and frees a whole ZSTD_DCtx, ~100 KB, at every call, and this
+    // runs for every pipeline made in play)
+    thread_local struct DCtx {
+        ZSTD_DCtx* z = ZSTD_createDCtx();
+        ~DCtx() { ZSTD_freeDCtx(z); }
+    } dctx;
     static std::atomic<int> told{0};
-    const size_t n = ZSTD_decompress(words.data(), words.size() * sizeof(uint32_t), st.code.packed.data(), st.code.packed.size());
+    if (!dctx.z) {
+        if (told++ < 8) logf("vk: no zstd context to unpack a stage's SPIR-V: its pipeline is not made");
+        return;
+    }
+    const size_t n = ZSTD_decompressDCtx(dctx.z, words.data(), words.size() * sizeof(uint32_t), st.code.packed.data(),
+                                         st.code.packed.size());
     if (ZSTD_isError(n) || n != words.size() * sizeof(uint32_t)) {
         if (told++ < 8) logf("vk: a stage's packed SPIR-V did not unpack (%s): its pipeline is not made",
                              ZSTD_isError(n) ? ZSTD_getErrorName(n) : "short");
